@@ -22,8 +22,9 @@ D:\TISS_Arena\
 │   ├── Audio-MCP-Server-main/       # Python - mic recording/playback
 │   ├── ffmpeg-mcp-main (1)/         # Python - FFmpeg video operations
 │   │   └── ffmpeg-mcp-main/
+│   ├── playwright-mcp-main/         # Node.js - browser automation (Microsoft)
 │   ├── video-audio-mcp-main/        # Python - 27+ editing tools
-│   ├── vidmagik-mcp-main/           # Python - 70+ MoviePy effects
+│   ├── vidmagik-mcp-main/           # Python - 70+ MoviePy effects (needs --transport stdio)
 │   └── youtube-mcp-server-main/     # TypeScript - YouTube API
 └── CLAUDE.md                        # This file
 ```
@@ -117,7 +118,8 @@ Refs: videoRef (main <video>), trackContainerRef (seekable area)
 | `audio-interface` | Python | `Audio-MCP-Server-main/audio_server.py` | 5: list devices, record, play, play file |
 | `ffmpeg-mcp` | Python | `ffmpeg-mcp-main/src/ffmpeg_mcp/server.py` | 8: find, info, clip, concat, play, overlay, scale, extract frames |
 | `video-audio` | Python | `video-audio-mcp-main/server.py` | 27+: format conversion, trim, transitions, subtitles, speed, silence removal |
-| `vidmagik` | Python | `vidmagik-mcp-main/main.py` | 70+: MoviePy compositing, color, geometry, motion, custom FX (matrix, kaleidoscope, chroma key) |
+| `vidmagik` | Python | `vidmagik-mcp-main/main.py --transport stdio` | 70+: MoviePy compositing, color, geometry, motion, custom FX (matrix, kaleidoscope, chroma key) |
+| `playwright` | Node.js | `playwright-mcp-main/packages/playwright-mcp/cli.js` | Browser automation: navigate, click, fill, screenshot, PDF, accessibility snapshots |
 | `youtube` | Node.js | `youtube-mcp-server-main/dist/index.js` | 7: search, video info, transcripts, channels, playlists |
 
 ### Python Dependencies (installed globally in Python 3.12)
@@ -126,6 +128,13 @@ sounddevice, soundfile, numpy, ffmpeg-python, moviepy, numexpr,
 opencv-contrib-python-headless, fastmcp>=3.0.0, mcp, pillow
 ```
 
+### Playwright MCP Setup
+```bash
+cd D:/TISS_Arena/MCP_Servers_repos/playwright-mcp-main
+npm install
+```
+No env vars needed. Uses Chromium by default.
+
 ### YouTube Server Setup
 ```bash
 cd D:/TISS_Arena/MCP_Servers_repos/youtube-mcp-server-main
@@ -133,6 +142,9 @@ npm install
 npm run build    # Compiles TypeScript to dist/
 ```
 Requires `YOUTUBE_API_KEY` environment variable (set in opencode.jsonc config).
+
+### VidMagik Note
+VidMagik defaults to HTTP transport. Must pass `--transport stdio` in the command array for Opencode compatibility.
 
 ### MCP Config Format (for adding new servers)
 ```jsonc
