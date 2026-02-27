@@ -61,8 +61,8 @@ export function TissArenaPanel(props: TissArenaPanelProps) {
     return d > 0 ? (currentTime() / d) * 100 : 0
   })
 
-  // Thumbnail count based on track width (~80px per thumb)
-  const thumbnailCount = createMemo(() => Math.max(1, Math.floor(trackWidth() / 80)))
+  // Thumbnail count based on track width (~80px per thumb), capped at 30 to avoid OOM on long videos
+  const thumbnailCount = createMemo(() => Math.min(30, Math.max(1, Math.floor(trackWidth() / 80))))
 
   // Video ref callback - attach event listeners
   const setVideoRef = (el: HTMLVideoElement) => {
@@ -182,12 +182,17 @@ export function TissArenaPanel(props: TissArenaPanelProps) {
   }))
 
   async function extractWaveform(src: string, originalPath: string) {
+    // Limit: only fetch first 50MB to avoid OOM on large videos
+    const MAX_BYTES = 50 * 1024 * 1024
     try {
-      const resp = await fetch(src)
+      const resp = await fetch(src, { headers: { Range: "bytes=0-" + (MAX_BYTES - 1) } })
       if (props.videoPath !== originalPath) return
 
       const buf = await resp.arrayBuffer()
       if (props.videoPath !== originalPath) return
+
+      // Skip if the fetched chunk is too small to contain audio
+      if (buf.byteLength < 1024) return
 
       const audioCtx = new AudioContext()
       let audioBuffer: AudioBuffer
@@ -195,7 +200,7 @@ export function TissArenaPanel(props: TissArenaPanelProps) {
         audioBuffer = await audioCtx.decodeAudioData(buf)
       } catch {
         await audioCtx.close()
-        return // No audio track
+        return // No audio track or partial data not decodable
       }
       await audioCtx.close()
 
