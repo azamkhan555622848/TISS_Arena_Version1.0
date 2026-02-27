@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build outputs
+dist/
+target/
+build/
+*.exe
+*.dll
+
+# Tauri build artifacts
+opencode-dev/packages/desktop/src-tauri/target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.bak
