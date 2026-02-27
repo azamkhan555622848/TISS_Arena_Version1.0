@@ -6,9 +6,16 @@ import { convertFileSrc } from "@tauri-apps/api/core"
 const thumbnailCache = new Map<string, string[]>()
 const waveformCache = new Map<string, number[]>()
 
+export interface FrameData {
+  dataUrl: string
+  filename: string
+}
+
 interface TissArenaPanelProps {
   videoPath?: string
   onClearVideo?: () => void
+  onSendCurrentFrame?: (frame: FrameData) => void
+  onSendVideoFrames?: (frames: FrameData[]) => void
 }
 
 function formatTimecode(seconds: number, fps = 24): string {
@@ -231,6 +238,90 @@ export function TissArenaPanel(props: TissArenaPanelProps) {
     }
   }
 
+  // Frame capture for sending to chat
+  const captureCurrentFrame = (): FrameData | undefined => {
+    if (!videoRef) return
+    const canvas = document.createElement("canvas")
+    const maxWidth = 1280
+    const scale = videoRef.videoWidth > maxWidth ? maxWidth / videoRef.videoWidth : 1
+    canvas.width = Math.round(videoRef.videoWidth * scale)
+    canvas.height = Math.round(videoRef.videoHeight * scale)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(videoRef, 0, 0, canvas.width, canvas.height)
+    const tc = formatTimecode(videoRef.currentTime)
+    const name = videoFileName() ?? "video"
+    const baseName = name.replace(/\.[^.]+$/, "")
+    return {
+      dataUrl: canvas.toDataURL("image/jpeg", 0.85),
+      filename: `${baseName}_${tc.replace(/:/g, "-")}.jpg`,
+    }
+  }
+
+  const captureFrameSequence = async (count: number): Promise<FrameData[]> => {
+    const src = videoSrc()
+    if (!src) return []
+
+    const video = document.createElement("video")
+    const canvas = document.createElement("canvas")
+    video.muted = true
+    video.src = src
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve()
+        video.onerror = () => reject()
+      })
+    } catch {
+      return []
+    }
+
+    if (!video.duration || !isFinite(video.duration)) return []
+
+    const maxWidth = 1280
+    const scale = video.videoWidth > maxWidth ? maxWidth / video.videoWidth : 1
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return []
+
+    const frameCount = Math.min(count, Math.max(1, Math.ceil(video.duration / 5)))
+    const name = videoFileName() ?? "video"
+    const baseName = name.replace(/\.[^.]+$/, "")
+    const frames: FrameData[] = []
+
+    for (let i = 0; i < frameCount; i++) {
+      video.currentTime = (video.duration / frameCount) * (i + 0.5)
+      await new Promise<void>((r) => {
+        video.onseeked = () => r()
+      })
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const secs = Math.floor(video.currentTime)
+      frames.push({
+        dataUrl: canvas.toDataURL("image/jpeg", 0.7),
+        filename: `${baseName}_frame_${String(i + 1).padStart(2, "0")}_${secs}s.jpg`,
+      })
+    }
+    return frames
+  }
+
+  const [isCapturing, setIsCapturing] = createSignal(false)
+
+  const handleSendFrame = () => {
+    const frame = captureCurrentFrame()
+    if (frame) props.onSendCurrentFrame?.(frame)
+  }
+
+  const handleAnalyzeVideo = async () => {
+    setIsCapturing(true)
+    try {
+      const frames = await captureFrameSequence(12)
+      if (frames.length > 0) props.onSendVideoFrames?.(frames)
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
   return (
     <section class="flex-1 flex flex-col p-4 bg-background-base min-w-0">
       <div class="flex-1 border border-[#8B5CF6] rounded-xl overflow-hidden flex flex-col shadow-[0_0_20px_rgba(139,92,246,0.15)] relative">
@@ -268,8 +359,38 @@ export function TissArenaPanel(props: TissArenaPanelProps) {
                   autoplay
                   class="w-full h-full object-contain bg-black"
                 />
-                {/* Filename badge + close button */}
+                {/* Filename badge + action buttons + close button */}
                 <div class="absolute top-4 right-4 z-10 flex items-center gap-2">
+                  <Show when={props.onSendCurrentFrame}>
+                    <button
+                      class="bg-background-base/80 border border-[#8B5CF6]/50 rounded px-2 py-1 flex items-center gap-1.5 hover:bg-background-base hover:border-[#8B5CF6] cursor-pointer transition-colors"
+                      onClick={handleSendFrame}
+                      title="Send current frame to chat"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#8B5CF6]">
+                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                        <circle cx="9" cy="9" r="2" />
+                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                      </svg>
+                      <span class="text-[10px] font-mono text-[#8B5CF6] font-bold tracking-wide">SEND FRAME</span>
+                    </button>
+                  </Show>
+                  <Show when={props.onSendVideoFrames}>
+                    <button
+                      class="bg-background-base/80 border border-[#0D9488]/50 rounded px-2 py-1 flex items-center gap-1.5 hover:bg-background-base hover:border-[#0D9488] cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={handleAnalyzeVideo}
+                      disabled={isCapturing()}
+                      title="Extract frames and send to chat for analysis"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#0D9488]">
+                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                        <rect x="2" y="6" width="14" height="12" rx="2" />
+                      </svg>
+                      <span class="text-[10px] font-mono text-[#0D9488] font-bold tracking-wide">
+                        {isCapturing() ? "CAPTURING..." : "ANALYZE VIDEO"}
+                      </span>
+                    </button>
+                  </Show>
                   <div class="bg-background-base/80 border border-border-weak rounded px-2 py-1">
                     <span class="text-[10px] font-mono text-text-base truncate max-w-48 inline-block">{videoFileName()}</span>
                   </div>

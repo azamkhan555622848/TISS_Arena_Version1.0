@@ -17,13 +17,14 @@ import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage, type FileNode } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
+import { usePrompt, type ImageAttachmentPart } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { SessionHeader, NewSessionView } from "@/components/session"
-import { TissArenaPanel } from "@/components/tiss-arena-panel"
+import { TissArenaPanel, type FrameData } from "@/components/tiss-arena-panel"
 import FileTree from "@/components/file-tree"
 import { same } from "@/utils/same"
+import { uuid } from "@/utils/uuid"
 import { createOpenReviewFile } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionReviewTab, type DiffStyle, type SessionReviewTabProps } from "@/pages/session/review-tab"
@@ -70,6 +71,28 @@ export default function Page() {
     if (node.type === "file" && isVideoFile(node.name)) {
       setSelectedVideoPath(node.absolute)
     }
+  }
+
+  const handleSendCurrentFrame = (frame: FrameData) => {
+    const attachment: ImageAttachmentPart = {
+      type: "image",
+      id: uuid(),
+      filename: frame.filename,
+      mime: "image/jpeg",
+      dataUrl: frame.dataUrl,
+    }
+    prompt.set([...prompt.current(), attachment], prompt.cursor())
+  }
+
+  const handleSendVideoFrames = (frames: FrameData[]) => {
+    const attachments: ImageAttachmentPart[] = frames.map((frame) => ({
+      type: "image",
+      id: uuid(),
+      filename: frame.filename,
+      mime: "image/jpeg",
+      dataUrl: frame.dataUrl,
+    }))
+    prompt.set([...prompt.current(), ...attachments], prompt.cursor())
   }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -1172,7 +1195,12 @@ export default function Page() {
 
         {/* TISS Arena Center Panel */}
         <Show when={isDesktop()}>
-          <TissArenaPanel videoPath={selectedVideoPath()} onClearVideo={() => setSelectedVideoPath(undefined)} />
+          <TissArenaPanel
+            videoPath={selectedVideoPath()}
+            onClearVideo={() => setSelectedVideoPath(undefined)}
+            onSendCurrentFrame={handleSendCurrentFrame}
+            onSendVideoFrames={handleSendVideoFrames}
+          />
         </Show>
 
         {/* File Tree Panel */}

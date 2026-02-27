@@ -27,7 +27,15 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
                 when={attachment.mime.startsWith("image/")}
                 fallback={
                   <div class={fallbackClass}>
-                    <Icon name="folder" class="size-6 text-text-weak" />
+                    <Show
+                      when={attachment.mime.startsWith("video/")}
+                      fallback={<Icon name="folder" class="size-6 text-text-weak" />}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-6 text-text-weak">
+                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                        <rect x="2" y="6" width="14" height="12" rx="2" />
+                      </svg>
+                    </Show>
                   </div>
                 }
               >

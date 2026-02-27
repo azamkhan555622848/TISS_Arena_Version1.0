@@ -6,7 +6,9 @@ import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
-export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
+export const ACCEPTED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"]
+export const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, ...ACCEPTED_VIDEO_TYPES, "application/pdf"]
+const VIDEO_SIZE_THRESHOLD = 20 * 1024 * 1024 // 20MB
 const LARGE_PASTE_CHARS = 8000
 const LARGE_PASTE_BREAKS = 120
 
@@ -35,8 +37,73 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
 
+  const addVideoFrames = async (file: File) => {
+    const url = URL.createObjectURL(file)
+    try {
+      const video = document.createElement("video")
+      video.muted = true
+      video.preload = "auto"
+      video.src = url
+
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve()
+        video.onerror = () => reject(new Error("Failed to load video"))
+      })
+
+      if (!video.duration || !isFinite(video.duration)) return
+
+      const canvas = document.createElement("canvas")
+      const maxWidth = 1280
+      const scale = video.videoWidth > maxWidth ? maxWidth / video.videoWidth : 1
+      canvas.width = Math.round(video.videoWidth * scale)
+      canvas.height = Math.round(video.videoHeight * scale)
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return
+
+      const frameCount = Math.min(16, Math.max(1, Math.ceil(video.duration / 10)))
+      const frames: ImageAttachmentPart[] = []
+      const baseName = file.name.replace(/\.[^.]+$/, "")
+
+      for (let i = 0; i < frameCount; i++) {
+        video.currentTime = (video.duration / frameCount) * (i + 0.5)
+        await new Promise<void>((r) => {
+          video.onseeked = () => r()
+        })
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7)
+        const secs = Math.floor(video.currentTime)
+        frames.push({
+          type: "image",
+          id: uuid(),
+          filename: `${baseName}_frame_${String(i + 1).padStart(2, "0")}_${secs}s.jpg`,
+          mime: "image/jpeg",
+          dataUrl,
+        })
+      }
+
+      if (frames.length === 0) return
+      const editor = input.editor()
+      if (!editor) return
+      const cursorPosition = prompt.cursor() ?? getCursorPosition(editor)
+      prompt.set([...prompt.current(), ...frames], cursorPosition)
+
+      showToast({
+        title: `Extracted ${frames.length} frames from video`,
+        description: file.name,
+      })
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+
+    // Large video files: extract frames instead of sending raw
+    if (ACCEPTED_VIDEO_TYPES.includes(file.type) && file.size > VIDEO_SIZE_THRESHOLD) {
+      await addVideoFrames(file)
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = () => {
